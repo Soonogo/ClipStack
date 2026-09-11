@@ -18,6 +18,10 @@ struct ClipboardItem: Identifiable, Codable, Equatable, Hashable {
     /// Absolute paths for `.file` items.
     var filePaths: [String]?
     var sourceAppName: String?
+    var sourceAppBundleID: String?
+    /// Page the content was copied from, when the source exposes it
+    /// (e.g. Chromium `org.chromium.source-url`).
+    var sourceURL: String?
     var createdAt: Date = Date()
     var isPinned: Bool = false
     /// Stable dedupe key (SHA-256 of the primary payload).

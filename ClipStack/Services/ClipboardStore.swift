@@ -24,6 +24,9 @@ final class ClipboardStore: ObservableObject {
     /// so memory stays flat regardless of history size.
     private let thumbnailCache = NSCache<NSString, NSImage>()
 
+    /// Small bounded cache for source-app icons.
+    private let appIconCache = NSCache<NSString, NSImage>()
+
     private var saveTask: Task<Void, Never>?
 
     init() {
@@ -33,6 +36,7 @@ final class ClipboardStore: ObservableObject {
         historyURL = baseDirectory.appendingPathComponent("history.json")
         maxHistory = UserDefaults.standard.object(forKey: "maxHistory") as? Int ?? 500
         thumbnailCache.countLimit = 150
+        appIconCache.countLimit = 50
 
         try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
         load()

@@ -8,6 +8,8 @@ struct PanelView: View {
     @State private var selection: UUID?
     @State private var keyMonitor: Any?
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var axTrusted = PasteService.isAccessibilityTrusted
+    @State private var axPollTimer: Timer?
 
     private var filtered: [ClipboardItem] {
         var base = kindFilter.map { kind in store.items.filter { $0.kind == kind } } ?? store.items
@@ -26,14 +28,51 @@ struct PanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if !axTrusted, UserDefaults.standard.bool(forKey: DefaultsKey.autoPaste) {
+                permissionBanner
+            }
             Divider().opacity(0.4)
             content
             Divider().opacity(0.4)
             footer
         }
         .background(.ultraThinMaterial)
-        .onAppear(perform: installKeyMonitor)
+        .onAppear {
+            installKeyMonitor()
+            startAXPolling()
+        }
         .onDisappear(perform: removeKeyMonitor)
+    }
+
+    private var permissionBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("点击条目仅会复制——授权“辅助功能”后可自动粘贴")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("去授权") {
+                PasteService.requestAccessibilityPermission()
+                PasteService.openAccessibilitySettings()
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.08))
+    }
+
+    private func startAXPolling() {
+        axPollTimer?.invalidate()
+        axPollTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
+            let trusted = PasteService.isAccessibilityTrusted
+            if trusted {
+                self.axTrusted = true
+                self.axPollTimer?.invalidate()
+                self.axPollTimer = nil
+            }
+        }
     }
 
     // MARK: - Header
@@ -232,7 +271,7 @@ struct PanelView: View {
             return true
         case 53: // escape
             if search.isEmpty {
-                AppDelegate.shared.hidePanel()
+                AppDelegate.shared.dismissPanel()
             } else {
                 search = ""
             }

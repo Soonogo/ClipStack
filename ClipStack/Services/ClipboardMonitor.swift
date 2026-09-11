@@ -62,16 +62,38 @@ final class ClipboardMonitor {
         guard types.isDisjoint(with: Self.ignoredTypes) else { return }
 
         let sourceApp = NSWorkspace.shared.frontmostApplication
-        let sourceName = sourceApp?.localizedName
         // Never record copies that came from ClipStack itself.
         if sourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier { return }
 
-        let item = makeItem(from: pasteboard, sourceApp: sourceName)
+        let sourceURL = Self.sourcePageURL(from: pasteboard)
+        let item = makeItem(
+            from: pasteboard,
+            sourceAppName: sourceApp?.localizedName,
+            sourceAppBundleID: sourceApp?.bundleIdentifier,
+            sourceURL: sourceURL
+        )
         guard let item else { return }
         onItem?(item)
     }
 
-    private func makeItem(from pasteboard: NSPasteboard, sourceApp: String?) -> ClipboardItem? {
+    /// URL of the page a copy originated from, when the source app exposes
+    /// it — Chromium-based browsers publish `org.chromium.source-url`.
+    private static func sourcePageURL(from pasteboard: NSPasteboard) -> String? {
+        for rawType in ["org.chromium.source-url", "public.url"] {
+            let type = NSPasteboard.PasteboardType(rawType)
+            if let value = pasteboard.string(forType: type), !value.isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private func makeItem(
+        from pasteboard: NSPasteboard,
+        sourceAppName: String?,
+        sourceAppBundleID: String?,
+        sourceURL: String?
+    ) -> ClipboardItem? {
         // File URLs (Finder copies) — checked first since they also carry a string.
         if let urls = pasteboard.readObjects(
             forClasses: [NSURL.self],
@@ -82,7 +104,9 @@ final class ClipboardMonitor {
                 kind: .file,
                 text: paths.joined(separator: "\n"),
                 filePaths: paths,
-                sourceAppName: sourceApp,
+                sourceAppName: sourceAppName,
+                sourceAppBundleID: sourceAppBundleID,
+                sourceURL: sourceURL,
                 contentHash: ClipboardItem.hash(paths.joined(separator: "|"))
             )
         }
@@ -98,7 +122,9 @@ final class ClipboardMonitor {
             return ClipboardItem(
                 kind: .image,
                 imageFileName: fileName,
-                sourceAppName: sourceApp,
+                sourceAppName: sourceAppName,
+                sourceAppBundleID: sourceAppBundleID,
+                sourceURL: sourceURL,
                 contentHash: ClipboardItem.hash(data: imageData)
             )
         }
@@ -110,7 +136,9 @@ final class ClipboardMonitor {
             return ClipboardItem(
                 kind: isLink ? .link : .text,
                 text: string,
-                sourceAppName: sourceApp,
+                sourceAppName: sourceAppName,
+                sourceAppBundleID: sourceAppBundleID,
+                sourceURL: isLink ? trimmed : sourceURL,
                 contentHash: ClipboardItem.hash(string)
             )
         }

@@ -14,22 +14,44 @@ struct ClipboardItemRow: View {
     }()
 
     var body: some View {
-        HStack(spacing: 10) {
-            icon
-                .frame(width: 36, height: 36)
+        HStack(alignment: .top, spacing: 10) {
+            // Source app icon, top-left of the card.
+            Image(nsImage: store.appIcon(bundleID: item.sourceAppBundleID))
+                .resizable()
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .overlay(alignment: .bottomTrailing) {
+                    typeDot
+                }
+                .help(item.sourceAppName ?? "Unknown")
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.previewText)
                     .font(.system(size: 13))
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .truncationMode(.tail)
                     .foregroundStyle(.primary)
+                    .textSelection(.enabled)
 
-                HStack(spacing: 6) {
+                if item.kind == .image, let name = item.imageFileName,
+                   let thumb = store.thumbnail(fileName: name, maxPixel: 300) {
+                    Image(nsImage: thumb)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: 80, alignment: .leading)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+
+                HStack(spacing: 5) {
                     if let app = item.sourceAppName {
                         Text(app)
+                    }
+                    if let host = sourceHost {
+                        Text("·")
+                        Text(host)
                             .lineLimit(1)
                     }
+                    Text("·")
                     Text(Self.timeFormatter.localizedString(for: item.createdAt, relativeTo: Date()))
                     if item.kind == .text, let text = item.text {
                         Text("·")
@@ -61,36 +83,28 @@ struct ClipboardItemRow: View {
         .onHover { hovered = $0 }
     }
 
-    @ViewBuilder
-    private var icon: some View {
-        switch item.kind {
-        case .image:
-            if let name = item.imageFileName,
-               let thumb = store.thumbnail(fileName: name) {
-                Image(nsImage: thumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            } else {
-                iconBadge("photo", color: .purple)
-            }
-        case .link:
-            iconBadge("link", color: .blue)
-        case .file:
-            iconBadge("doc.fill", color: .indigo)
-        case .text:
-            iconBadge("text.alignleft", color: .teal)
+    /// Small kind badge sitting on the app icon's corner.
+    private var typeDot: some View {
+        let (symbol, color): (String, Color) = switch item.kind {
+        case .text: ("text.alignleft", .teal)
+        case .link: ("link", .blue)
+        case .image: ("photo", .purple)
+        case .file: ("doc.fill", .indigo)
         }
+        return Image(systemName: symbol)
+            .font(.system(size: 6, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(2)
+            .background(Circle().fill(color))
+            .offset(x: 4, y: 4)
     }
 
-    private func iconBadge(_ symbol: String, color: Color) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(color.opacity(0.15))
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(color)
-        }
+    /// Shortened host/path of the page the content was copied from.
+    private var sourceHost: String? {
+        guard let raw = item.sourceURL,
+              let url = URL(string: raw),
+              let host = url.host()
+        else { return nil }
+        return host.replacingOccurrences(of: #"^www\."#, with: "", options: .regularExpression)
     }
 }

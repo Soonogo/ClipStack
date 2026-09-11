@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private(set) var panel: NSPanel!
     private var monitor: ClipboardMonitor!
     private var didPromptAccessibility = false
+    /// The app that was frontmost before our panel took focus —
+    /// the ⌘V keystroke must be delivered back to it.
+    private var previousApp: NSRunningApplication?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -77,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func showPanel() {
         guard let screen = screenUnderMouse() ?? NSScreen.main else { return }
+        // Remember where ⌘V should go before we steal activation.
+        previousApp = NSWorkspace.shared.frontmostApplication
         let size = panel.frame.size
         let x = screen.visibleFrame.midX - size.width / 2
         let y = screen.visibleFrame.maxY - size.height - 12
@@ -85,8 +90,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
 
+    /// Give keyboard focus back to the app that was active before the
+    /// panel appeared — without this, a synthetic ⌘V goes to ClipStack
+    /// (a menu-bar app) and lands nowhere.
+    private func restorePreviousAppFocus() {
+        guard let app = previousApp, app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        app.activate()
+    }
+
     func hidePanel() {
         panel.orderOut(nil)
+    }
+
+    /// Dismiss without pasting (clicking away / Esc): still hand focus
+    /// back so the user isn't left inside an app-less session.
+    func dismissPanel() {
+        hidePanel()
+        restorePreviousAppFocus()
     }
 
     private func screenUnderMouse() -> NSScreen? {
@@ -101,11 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         monitor.swallowPendingChange()
         store.moveToTop(item)
         hidePanel()
+        restorePreviousAppFocus()
 
         guard UserDefaults.standard.bool(forKey: DefaultsKey.autoPaste) else { return }
 
         if PasteService.isAccessibilityTrusted {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            // Wait for the other app to become active, then post ⌘V.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 PasteService.simulatePaste()
             }
         } else if !didPromptAccessibility {
@@ -143,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) {
         guard let window = notification.object as? NSPanel, window === panel else { return }
         hidePanel()
+        previousApp = nil
     }
 }
 
