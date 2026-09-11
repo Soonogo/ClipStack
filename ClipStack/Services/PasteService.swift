@@ -1,5 +1,7 @@
 import AppKit
 import ApplicationServices
+import Carbon
+import CoreGraphics
 
 enum PasteService {
     /// Writes an item back to the system pasteboard.
