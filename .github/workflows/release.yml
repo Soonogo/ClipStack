@@ -13,11 +13,16 @@ permissions:
 
 jobs:
   build-dmg:
-    runs-on: macos-14 # Apple Silicon (arm64) runner
+    runs-on: macos-15 # Apple Silicon (arm64) runner
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)/Contents/Developer"
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
