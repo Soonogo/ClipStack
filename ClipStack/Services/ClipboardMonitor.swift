@@ -4,7 +4,8 @@ import AppKit
 /// into `ClipboardItem`s. Skips transient/concealed data so password
 /// managers and auto-generated pasteboard contents are never captured.
 final class ClipboardMonitor {
-    var onItem: (@MainActor (ClipboardItem) -> Void)?
+    /// Invoked on the main thread for each new clipboard entry.
+    var onItem: ((ClipboardItem) -> Void)?
 
     private var timer: Timer?
     private var lastChangeCount: Int
@@ -67,8 +68,7 @@ final class ClipboardMonitor {
 
         let item = makeItem(from: pasteboard, sourceApp: sourceName)
         guard let item else { return }
-        let callback = onItem
-        Task { @MainActor in callback?(item) }
+        onItem?(item)
     }
 
     private func makeItem(from pasteboard: NSPasteboard, sourceApp: String?) -> ClipboardItem? {

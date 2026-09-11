@@ -3,8 +3,8 @@ import Combine
 import ImageIO
 
 /// Owns the persisted clipboard history and the on-disk image cache.
-/// All state lives on the main actor; disk writes are atomic and debounced.
-@MainActor
+/// All mutations happen on the main thread (the monitor polls on the
+/// main run loop); disk writes are atomic and debounced.
 final class ClipboardStore: ObservableObject {
     @Published private(set) var items: [ClipboardItem] = []
 

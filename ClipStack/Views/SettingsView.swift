@@ -91,14 +91,12 @@ struct SettingsView: View {
         accessibilityTrusted = PasteService.isAccessibilityTrusted
         permissionTimer?.invalidate()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            Task { @MainActor in
-                let trusted = PasteService.isAccessibilityTrusted
-                if trusted != accessibilityTrusted {
-                    accessibilityTrusted = trusted
-                }
-                if trusted {
-                    stopPermissionPolling()
-                }
+            let trusted = PasteService.isAccessibilityTrusted
+            if trusted != self.accessibilityTrusted {
+                self.accessibilityTrusted = trusted
+            }
+            if trusted {
+                self.stopPermissionPolling()
             }
         }
     }
