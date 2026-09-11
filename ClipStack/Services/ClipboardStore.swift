@@ -127,6 +127,23 @@ final class ClipboardStore: ObservableObject {
         NSImage(contentsOf: imagesDirectory.appendingPathComponent(fileName))
     }
 
+    /// Icon of the app an item was copied from, resolved by bundle ID.
+    /// The Finder icon stands in when the source is unknown.
+    func appIcon(bundleID: String?) -> NSImage {
+        let key = (bundleID ?? "") as NSString
+        if let cached = appIconCache.object(forKey: key) { return cached }
+        let icon: NSImage
+        if let bundleID,
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            icon = NSWorkspace.shared.icon(forFile: appURL.path)
+        } else {
+            icon = NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app")
+        }
+        icon.size = NSSize(width: 32, height: 32)
+        appIconCache.setObject(icon, forKey: key)
+        return icon
+    }
+
     // MARK: - Persistence
 
     private func load() {
