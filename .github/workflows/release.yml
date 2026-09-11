@@ -27,12 +27,53 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Import self-signed certificate
+        # A stable self-signed identity keeps macOS permissions (Accessibility,
+        # Launch at Login) valid across rebuilds — ad-hoc signatures change
+        # cdhash every build and TCC silently drops the grant.
+        env:
+          CODESIGN_P12_BASE64: ${{ secrets.CODESIGN_P12_BASE64 }}
+          CODESIGN_P12_PASSWORD: ${{ secrets.CODESIGN_P12_PASSWORD }}
+        run: |
+          if [ -z "${CODESIGN_P12_BASE64:-}" ]; then
+            echo "No signing secret — falling back to ad-hoc signature"
+            echo "SIGNING=adhoc" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "SIGNING=selfsigned" >> "$GITHUB_ENV"
+          echo "$CODESIGN_P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p ci-keychain-pass ci-signing.keychain-db
+          security default-keychain -s ci-signing.keychain-db
+          security unlock-keychain -p ci-keychain-pass ci-signing.keychain-db
+          security set-keychain-settings -lut 21600 ci-signing.keychain-db
+          security import "$RUNNER_TEMP/cert.p12" \
+            -k ci-signing.keychain-db \
+            -P "$CODESIGN_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k ci-keychain-pass ci-signing.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: Generate Xcode project
         run: xcodegen
 
       - name: Build ClipStack (arm64)
         run: |
           set -euo pipefail
+          if [ "${SIGNING:-adhoc}" = "selfsigned" ]; then
+            SIGN_ARGS=(
+              CODE_SIGN_IDENTITY="ClipStack Dev Signing"
+              CODE_SIGNING_REQUIRED=YES
+              CODE_SIGNING_ALLOWED=YES
+              OTHER_CODE_SIGN_FLAGS="--keychain ci-signing.keychain-db"
+            )
+          else
+            SIGN_ARGS=(
+              CODE_SIGN_IDENTITY="-"
+              CODE_SIGNING_REQUIRED=NO
+              CODE_SIGNING_ALLOWED=NO
+            )
+          fi
           xcodebuild \
             -project ClipStack.xcodeproj \
             -scheme ClipStack \
@@ -40,9 +81,7 @@ jobs:
             -derivedDataPath build \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            "${SIGN_ARGS[@]}" \
             build
 
       - name: Package DMG
@@ -50,6 +89,7 @@ jobs:
           set -euo pipefail
           APP_PATH="build/Build/Products/Release/ClipStack.app"
           test -d "$APP_PATH"
+          codesign -dv --verbose=2 "$APP_PATH" 2>&1 | head -8 || true
           rm -rf dmg && mkdir -p dmg
           cp -R "$APP_PATH" dmg/
           ln -s /Applications dmg/Applications
